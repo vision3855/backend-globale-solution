@@ -49,21 +49,18 @@ export const securityHeaders = helmet({
 
 // CORS configuration
 export const corsOptions = {
-  origin: (origin, callback) => {
-    const allowedOrigins = [
-      process.env.CORS_ORIGIN || 'http://localhost:3000',
-      'http://localhost:5173', // Vite default
-    ];
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like Postman or mobile apps)
+    if (!origin) return callback(null, true);
     
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      securityLog('CORS_BLOCKED', { origin });
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('Blocked by CORS'));
     }
   },
   credentials: true,
+  optionsSuccessStatus: 200, // Responds cleanly to preflight OPTIONS requests
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
   maxAge: 86400, // 24 hours

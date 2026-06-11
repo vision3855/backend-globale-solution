@@ -7,7 +7,6 @@ import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
 import { 
   securityHeaders, 
-  corsOptions, 
   apiLimiter, 
   sanitizeNoSQL, 
   preventHPP, 
@@ -16,16 +15,14 @@ import {
   requestLogger,
   errorHandler,
   notFound
-} from './middleware/security.js';
+} from './middleware/security.js'; // 1. Removed corsOptions from import to use local configuration
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
 import transactionRoutes from './routes/transactions.js';
 import dashboardRoutes from './routes/dashboard.js';
 
-// Load env vars
 dotenv.config();
 
-// Validate critical environment variables
 const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -41,28 +38,47 @@ if (process.env.JWT_SECRET.length < 32) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Connect to database
 connectDB();
 
 const app = express();
-
-// Trust proxy if behind reverse proxy (nginx, etc.)
 app.set('trust proxy', 1);
 
-// Security middleware - ORDER MATTERS
-app.use(requestId);
-app.use(securityHeaders);
+// 2. Explicit Local CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://globale-solution-fe.vercel.app'
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+// 3. CORRECT MIDDLEWARE ORDER: CORS MUST GO FIRST
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Explicitly handle preflight across all routes
+
+// Remaining Security middleware
+app.use(requestId);
+app.use(securityHeaders); 
 app.use(apiLimiter);
 app.use(cookieParser());
-app.use(express.json({ limit: '10kb' })); // Prevent large payload attacks
+app.use(express.json({ limit: '10kb' })); 
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(sanitizeNoSQL);
 app.use(xssProtection);
 app.use(preventHPP);
 app.use(requestLogger);
 
-// Health check (no rate limit in dev)
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -81,7 +97,6 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-// Graceful shutdown
 const server = app.listen(process.env.PORT || 5000, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${process.env.PORT || 5000}`);
 });
